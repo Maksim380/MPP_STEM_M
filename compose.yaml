@@ -1,0 +1,30 @@
+# docker compose up --build  →  дашборд на http://localhost:8080
+# Секрети беруться з файлу .env (див. .env.example), а не з коду.
+services:
+  api:
+    build:
+      context: .
+      target: api
+    ports:
+      - "8080:8080"
+    environment:
+      Auth__SensorApiKey: ${SENSOR_API_KEY:?задайте SENSOR_API_KEY у .env}
+      Auth__OperatorUsername: ${OPERATOR_USERNAME:-operator}
+      Auth__OperatorPassword: ${OPERATOR_PASSWORD:?задайте OPERATOR_PASSWORD у .env}
+      Auth__JwtSigningKey: ${JWT_SIGNING_KEY:?задайте JWT_SIGNING_KEY у .env (мінімум 32 символи)}
+    volumes:
+      - greenhouse-data:/data
+
+  simulator:
+    build:
+      context: .
+      target: simulator
+    depends_on:
+      - api
+    environment:
+      GREENHOUSE_API_KEY: ${SENSOR_API_KEY}
+    command: ["--api", "http://api:8080", "--interval", "2", "--speed", "600"]
+    restart: on-failure
+
+volumes:
+  greenhouse-data:

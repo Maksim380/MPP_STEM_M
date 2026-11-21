@@ -72,9 +72,13 @@ public sealed class SimulatorRunner(HttpClient http, SimulatorOptions options, T
         {
             await output.WriteLineAsync($"Бекенд недоступний ({e.Message}), повтор через {options.IntervalSeconds} с");
         }
-        catch (TaskCanceledException) when (!ct.IsCancellationRequested)
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
             await output.WriteLineAsync("Бекенд не відповів вчасно, повтор");
+        }
+        catch (OperationCanceledException)
+        {
+            // Користувач натиснув Ctrl+C під час надсилання — просто завершуємо цикл.
         }
 
         return false;

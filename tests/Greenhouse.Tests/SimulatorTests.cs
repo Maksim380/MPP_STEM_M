@@ -160,16 +160,18 @@ public class SimulatorRunnerTests
     public async Task Stops_on_cancellation()
     {
         using var cts = new CancellationTokenSource();
-        using var http = new HttpClient(new StubHandler(_ =>
+        var handler = new StubHandler(_ =>
         {
             cts.Cancel();
             return new HttpResponseMessage(HttpStatusCode.Created);
-        }));
+        });
+        using var http = new HttpClient(handler);
         var options = new SimulatorOptions { IntervalSeconds = 60, Seed = 1 };
 
-        var accepted = await new SimulatorRunner(http, options, TextWriter.Null, TimeProvider.System).RunAsync(cts.Token);
+        // Без Count цикл безкінечний; скасування має завершити його без винятку і без 60 с очікування.
+        await new SimulatorRunner(http, options, TextWriter.Null, TimeProvider.System).RunAsync(cts.Token);
 
-        Assert.Equal(1, accepted);
+        Assert.Single(handler.Requests);
     }
 
     private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler

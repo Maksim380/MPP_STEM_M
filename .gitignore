@@ -9,3 +9,5 @@ coverage/
 *.user
 .vs/
 .idea/
+coverage/
+.env

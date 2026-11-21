@@ -6,25 +6,77 @@ on:
   pull_request:
 
 jobs:
-  test:
+  build-test:
+    name: Збірка і тести (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        python-version: ["3.11", "3.13"]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+
+      - uses: actions/setup-dotnet@v4
         with:
-          python-version: ${{ matrix.python-version }}
-      - run: pip install -r requirements-dev.txt
-      - name: Статичний аналіз (ruff)
-        run: ruff check .
+          dotnet-version: 10.0.x
+
+      - name: Відновити залежності та інструменти
+        run: |
+          dotnet restore
+          dotnet tool restore
+
+      - name: Стиль коду (dotnet format)
+        run: dotnet format --verify-no-changes --no-restore
+
+      - name: Збірка зі статичним аналізом (попередження = помилки)
+        run: dotnet build -c Release --no-restore
+
       - name: Тести з покриттям
-        run: pytest --cov --cov-report=term-missing --cov-report=xml
+        run: dotnet test -c Release --no-build --settings coverlet.runsettings --results-directory TestResults --logger "trx;LogFileName=tests.trx"
+
+      - name: Звіт покриття і поріг 80%
+        shell: bash
+        run: |
+          dotnet reportgenerator -reports:"TestResults/*/coverage.cobertura.xml" -targetdir:coverage -reporttypes:"Cobertura;TextSummary;MarkdownSummaryGithub;Html"
+          cat coverage/Summary.txt
+          cat coverage/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
+          rate=$(grep -o 'line-rate="[0-9.]*"' coverage/Cobertura.xml | head -1 | grep -o '[0-9.]*')
+          echo "Покриття рядків: $rate"
+          awk -v r="$rate" 'BEGIN { exit (r >= 0.80) ? 0 : 1 }' || { echo "Покриття нижче 80%"; exit 1; }
+
       - uses: actions/upload-artifact@v4
-        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
+        if: always()
         with:
-          name: coverage-report
-          path: coverage.xml
+          name: coverage-${{ matrix.os }}
+          path: |
+            coverage/
+            TestResults/**/*.trx
+
+  smoke:
+    name: Запуск за README (Ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Бекенд + симулятор + перевірка логу
+        run: |
+          dotnet build -c Release
+          ASPNETCORE_ENVIRONMENT=Development dotnet run -c Release --no-build --project src/Greenhouse.Api --urls http://localhost:5000 &
+          for i in $(seq 1 30); do curl -sf http://localhost:5000/api/health && break; sleep 1; done
+          dotnet run -c Release --no-build --project src/Greenhouse.Simulator -- --interval 0.2 --count 5 --anomaly-rate 0.3
+          curl -sf http://localhost:5000/api/readings/latest
+          curl -sf http://localhost:5000/api/alerts
+          if grep -E "\[(ERR|FTL)\]" src/Greenhouse.Api/logs/*.log; then echo "У лозі є помилки"; exit 1; fi
+
+  docker:
+    name: Docker-образ
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Зібрати образ
+        run: docker build -t greenhouse-api .
