@@ -96,3 +96,10 @@ input, button {
 button { cursor: pointer; }
 button:hover { border-color: var(--axis); }
 td.muted { color: var(--muted); }
+.picker { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-2); font-size: 14px; }
+select { font: inherit; font-size: 14px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--ink); }
+.account { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.account [hidden] { display: none; }
+.threshold { display: flex; align-items: center; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
+.threshold[hidden] { display: none; }
+.threshold input { width: 80px; }

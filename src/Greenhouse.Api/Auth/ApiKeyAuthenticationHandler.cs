@@ -1,7 +1,6 @@
 using System.Security.Claims;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Encodings.Web;
+using Greenhouse.Core.Security;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
 
@@ -23,7 +22,7 @@ public sealed class ApiKeyAuthenticationHandler(
         }
 
         var expected = auth.Value.SensorApiKey;
-        if (string.IsNullOrEmpty(expected) || !FixedTimeEquals(provided.ToString(), expected))
+        if (string.IsNullOrEmpty(expected) || !TokenHasher.FixedTimeEquals(provided.ToString(), expected))
         {
             return Task.FromResult(AuthenticateResult.Fail("Неправильний API-ключ"));
         }
@@ -34,8 +33,4 @@ public sealed class ApiKeyAuthenticationHandler(
         return Task.FromResult(AuthenticateResult.Success(
             new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme.Name)));
     }
-
-    /// <summary>Порівняння за сталий час, щоб ключ не можна було підібрати за часом відповіді.</summary>
-    internal static bool FixedTimeEquals(string a, string b) =>
-        CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(a), Encoding.UTF8.GetBytes(b));
 }

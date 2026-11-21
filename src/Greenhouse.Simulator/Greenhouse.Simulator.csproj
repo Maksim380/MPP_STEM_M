@@ -5,6 +5,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Greenhouse.Domain\Greenhouse.Domain.csproj" />
+    <ProjectReference Include="..\Greenhouse.Core\Greenhouse.Core.csproj" />
   </ItemGroup>
 </Project>

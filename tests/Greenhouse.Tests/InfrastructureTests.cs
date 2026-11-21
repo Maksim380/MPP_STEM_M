@@ -1,5 +1,5 @@
-using Greenhouse.Api.Data;
 using Greenhouse.Api.Infrastructure;
+using Greenhouse.Core.Data;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -48,14 +48,20 @@ public class DatabaseSchemaTests : IDisposable
         Assert.Contains("IX_readings_sensor_id_recorded_at", names);
         Assert.Contains("IX_sensors_name", names);
         Assert.Contains("IX_alerts_sensor_id_closed_at", names);
+        Assert.Contains("IX_sensors_greenhouse_id", names);
+        Assert.Contains("IX_users_username", names);
+        Assert.Contains("IX_refresh_tokens_token_hash", names);
     }
 
     [Theory]
     [InlineData("INSERT INTO readings (sensor_id, value, recorded_at) VALUES (999, 1, '2026-01-01')")] // FK
-    [InlineData("INSERT INTO sensors (name, kind) VALUES ('temp-1', 'temperature')")] // UNIQUE
-    [InlineData("INSERT INTO sensors (name, kind) VALUES ('co2-1', 'co2')")] // FK на тип
+    [InlineData("INSERT INTO sensors (name, kind, greenhouse_id) VALUES ('temp-1', 'temperature', 1)")] // UNIQUE
+    [InlineData("INSERT INTO sensors (name, kind, greenhouse_id) VALUES ('co2-1', 'co2', 1)")] // FK на тип
+    [InlineData("INSERT INTO sensors (name, kind, greenhouse_id) VALUES ('t-9', 'temperature', 99)")] // FK на теплицю
+    [InlineData("INSERT INTO thresholds (greenhouse_id, kind, comfort_min, comfort_max) VALUES (1, 'light', 5, 1)")] // PK + CHECK
+    [InlineData("INSERT INTO users (username, password_hash, role, created_at) VALUES ('x', 'h', 'root', '2026-01-01')")] // CHECK ролі
     [InlineData("INSERT INTO alerts (sensor_id, kind, trigger_value, opened_at) VALUES (1, 'medium', 1, '2026-01-01')")] // CHECK
-    [InlineData("INSERT INTO sensor_types (kind, unit, valid_min, valid_max, comfort_min, comfort_max) VALUES ('x', 'u', 5, 1, 0, 0)")] // CHECK
+    [InlineData("INSERT INTO sensor_types (kind, unit, valid_min, valid_max) VALUES ('x', 'u', 5, 1)")] // CHECK
     public void Integrity_constraints_reject_bad_rows(string sql)
     {
         using var conn = Open();

@@ -1,5 +1,5 @@
 using System.Net.Http.Json;
-using Greenhouse.Api.Contracts;
+using Greenhouse.Core.Contracts;
 
 namespace Greenhouse.Tests;
 

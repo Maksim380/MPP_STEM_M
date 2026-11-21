@@ -8,7 +8,7 @@
           <Format>cobertura</Format>
           <Include>[Greenhouse.*]*</Include>
           <Exclude>[Greenhouse.Tests]*</Exclude>
-          <ExcludeByFile>**/Migrations/*.cs</ExcludeByFile>
+          <ExcludeByFile>**/Migrations/**/*.cs</ExcludeByFile>
           <ExcludeByAttribute>GeneratedCodeAttribute,CompilerGeneratedAttribute</ExcludeByAttribute>
         </Configuration>
       </DataCollector>

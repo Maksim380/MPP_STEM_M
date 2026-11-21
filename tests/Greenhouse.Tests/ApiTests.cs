@@ -1,5 +1,5 @@
 using System.Net;
-using Greenhouse.Api.Contracts;
+using Greenhouse.Core.Contracts;
 
 namespace Greenhouse.Tests;
 

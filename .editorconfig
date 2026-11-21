@@ -18,5 +18,5 @@ csharp_style_namespace_declarations = file_scoped:warning
 dotnet_sort_system_directives_first = true
 
 # Міграції EF Core генерує інструмент, аналізатори їх не перевіряють.
-[**/Migrations/*.cs]
+[**/Migrations/**.cs]
 generated_code = true

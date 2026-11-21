@@ -2,7 +2,7 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 COPY Directory.Build.props global.json .editorconfig ./
-COPY src/Greenhouse.Domain/Greenhouse.Domain.csproj src/Greenhouse.Domain/
+COPY src/Greenhouse.Core/Greenhouse.Core.csproj src/Greenhouse.Core/
 COPY src/Greenhouse.Api/Greenhouse.Api.csproj src/Greenhouse.Api/
 COPY src/Greenhouse.Simulator/Greenhouse.Simulator.csproj src/Greenhouse.Simulator/
 RUN dotnet restore src/Greenhouse.Api/Greenhouse.Api.csproj \

@@ -1,7 +1,7 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
-using Greenhouse.Api.Contracts;
+using Greenhouse.Core.Contracts;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
@@ -15,8 +15,9 @@ namespace Greenhouse.Tests;
 public sealed class GreenhouseFactory : WebApplicationFactory<Program>
 {
     public const string SensorKey = "test-sensor-key";
-    public const string OperatorUser = "operator";
-    public const string OperatorPassword = "test-password";
+    public const string AdminUser = "admin";
+    public const string AdminPassword = "admin-password";
+    public const string UserPassword = "user-password";
 
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
@@ -35,8 +36,9 @@ public sealed class GreenhouseFactory : WebApplicationFactory<Program>
         builder.UseSetting("ConnectionStrings:Greenhouse", $"Data Source={DbPath};Pooling=False");
         builder.UseSetting("Logging:FilePath", Path.Combine(LogDir, "greenhouse-.log"));
         builder.UseSetting("Auth:SensorApiKey", SensorKey);
-        builder.UseSetting("Auth:OperatorUsername", OperatorUser);
-        builder.UseSetting("Auth:OperatorPassword", OperatorPassword);
+        builder.UseSetting("Auth:AdminUsername", AdminUser);
+        builder.UseSetting("Auth:AdminPassword", AdminPassword);
+        builder.UseSetting("Auth:LoginAttemptsPerMinute", "1000");
         builder.UseSetting("Auth:JwtSigningKey", "test-signing-key-0123456789-abcdefghij");
     }
 
@@ -48,15 +50,35 @@ public sealed class GreenhouseFactory : WebApplicationFactory<Program>
         return client;
     }
 
-    /// <summary>Клієнт оператора (з JWT).</summary>
-    public async Task<HttpClient> CreateOperatorClientAsync()
+    /// <summary>Входить і повертає відповідь з токенами.</summary>
+    public async Task<AuthResponse> LoginAsync(string username, string password)
+    {
+        using var client = CreateClient();
+        var response = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest(username, password), Json);
+        response.EnsureSuccessStatusCode();
+        return (await response.Content.ReadFromJsonAsync<AuthResponse>(Json))!;
+    }
+
+    /// <summary>Клієнт з JWT адміністратора.</summary>
+    public async Task<HttpClient> CreateAdminClientAsync() => WithToken(await LoginAsync(AdminUser, AdminPassword));
+
+    /// <summary>Створює користувача з роллю (через API адміністратора) і повертає його клієнт.</summary>
+    public async Task<HttpClient> CreateUserClientAsync(string role)
+    {
+        var username = $"{role}-{Guid.NewGuid():N}"[..20];
+        using (var admin = await CreateAdminClientAsync())
+        {
+            var created = await admin.PostAsJsonAsync("/api/users", new UserIn(username, UserPassword, role), Json);
+            created.EnsureSuccessStatusCode();
+        }
+
+        return WithToken(await LoginAsync(username, UserPassword));
+    }
+
+    private HttpClient WithToken(AuthResponse auth)
     {
         var client = CreateClient();
-        var response = await client.PostAsJsonAsync("/api/auth/token",
-            new TokenRequest(OperatorUser, OperatorPassword), Json);
-        response.EnsureSuccessStatusCode();
-        var token = await response.Content.ReadFromJsonAsync<TokenResponse>(Json);
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token!.AccessToken);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.AccessToken);
         return client;
     }
 

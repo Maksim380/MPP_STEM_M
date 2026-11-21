@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Net.Http.Json;
 using System.Text.Json;
-using Greenhouse.Domain;
+using Greenhouse.Core.Domain;
 
 namespace Greenhouse.Simulator;
 

@@ -1,7 +1,8 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using Greenhouse.Api.Contracts;
+using Greenhouse.Core.Contracts;
+using Greenhouse.Core.Domain;
 
 namespace Greenhouse.Tests;
 
@@ -84,12 +85,12 @@ public class AlertTests : IDisposable
     {
         await Send(35, "2026-01-01T10:00:00Z");
         var id = (await _sensor.AlertsAsync()).Single().Id;
-        using var op = await _factory.CreateOperatorClientAsync();
+        using var op = await _factory.CreateUserClientAsync(Roles.Operator);
 
         var first = await op.PostAsync(new Uri($"/api/alerts/{id}/ack", UriKind.Relative), null);
         Assert.Equal(HttpStatusCode.OK, first.StatusCode);
         var acked = await first.Content.ReadFromJsonAsync<AlertOut>(GreenhouseFactory.Json);
-        Assert.Equal(GreenhouseFactory.OperatorUser, acked!.AcknowledgedBy);
+        Assert.StartsWith("operator-", acked!.AcknowledgedBy, StringComparison.Ordinal);
 
         var second = await (await op.PostAsync(new Uri($"/api/alerts/{id}/ack", UriKind.Relative), null))
             .Content.ReadFromJsonAsync<AlertOut>(GreenhouseFactory.Json);
@@ -99,7 +100,7 @@ public class AlertTests : IDisposable
     [Fact]
     public async Task Acknowledge_unknown_alert_is_404()
     {
-        using var op = await _factory.CreateOperatorClientAsync();
+        using var op = await _factory.CreateUserClientAsync(Roles.Operator);
         var response = await op.PostAsync(new Uri("/api/alerts/999/ack", UriKind.Relative), null);
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -142,7 +143,7 @@ public class AuthTests : IDisposable
     [Fact]
     public async Task Operator_token_cannot_write_readings()
     {
-        using var op = await _factory.CreateOperatorClientAsync();
+        using var op = await _factory.CreateUserClientAsync(Roles.Operator);
         var response = await op.PostReadingAsync(new { sensor = "temp-1", value = 20 });
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -165,13 +166,13 @@ public class AuthTests : IDisposable
     }
 
     [Theory]
-    [InlineData("operator", "wrong")]
-    [InlineData("admin", "test-password")]
+    [InlineData("admin", "wrong-password")]
+    [InlineData("nobody", "admin-password")]
     [InlineData(null, null)]
     public async Task Wrong_credentials_get_401(string? username, string? password)
     {
         using var client = _factory.CreateClient();
-        var response = await client.PostAsJsonAsync("/api/auth/token", new TokenRequest(username, password), GreenhouseFactory.Json);
+        var response = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest(username, password), GreenhouseFactory.Json);
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 

@@ -56,21 +56,40 @@ jobs:
             TestResults/**/*.trx
 
   smoke:
-    name: Запуск за README (Ubuntu)
+    name: Запуск за README (${{ matrix.db }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        db: [Sqlite, Postgres]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: greenhouse
+          POSTGRES_PASSWORD: greenhouse
+          POSTGRES_DB: greenhouse
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U greenhouse" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      ASPNETCORE_ENVIRONMENT: Development
+      Database__Provider: ${{ matrix.db }}
+      ConnectionStrings__Greenhouse: ${{ matrix.db == 'Postgres' && 'Host=localhost;Database=greenhouse;Username=greenhouse;Password=greenhouse' || 'Data Source=greenhouse.db' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
-      - name: Бекенд + симулятор + перевірка логу
+      - name: Бекенд + симулятор + вхід адміністратора + перевірка логу
         run: |
           dotnet build -c Release
-          ASPNETCORE_ENVIRONMENT=Development dotnet run -c Release --no-build --project src/Greenhouse.Api --urls http://localhost:5000 &
-          for i in $(seq 1 30); do curl -sf http://localhost:5000/api/health && break; sleep 1; done
+          dotnet run -c Release --no-build --project src/Greenhouse.Api --urls http://localhost:5000 &
+          for i in $(seq 1 60); do curl -sf http://localhost:5000/api/health && break; sleep 1; done
           dotnet run -c Release --no-build --project src/Greenhouse.Simulator -- --interval 0.2 --count 5 --anomaly-rate 0.3
           curl -sf http://localhost:5000/api/readings/latest
           curl -sf http://localhost:5000/api/alerts
+          curl -sf -H "Content-Type: application/json" -d '{"username":"admin","password":"admin12345"}' http://localhost:5000/api/auth/login > /dev/null
           if grep -E "\[(ERR|FTL)\]" src/Greenhouse.Api/logs/*.log; then echo "У лозі є помилки"; exit 1; fi
 
   docker:

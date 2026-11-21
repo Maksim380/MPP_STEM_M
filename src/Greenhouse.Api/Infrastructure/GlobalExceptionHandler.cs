@@ -1,4 +1,4 @@
-using Greenhouse.Api.Services;
+using Greenhouse.Core.Services;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 
@@ -20,7 +20,13 @@ public sealed partial class GlobalExceptionHandler(
         switch (exception)
         {
             case ClientDataException client:
-                status = client.StatusCode;
+                status = client.Kind switch
+                {
+                    ErrorKind.NotFound => StatusCodes.Status404NotFound,
+                    ErrorKind.Conflict => StatusCodes.Status409Conflict,
+                    ErrorKind.Implausible => StatusCodes.Status422UnprocessableEntity,
+                    _ => StatusCodes.Status400BadRequest,
+                };
                 title = "Некоректні дані";
                 detail = client.Message;
                 break;

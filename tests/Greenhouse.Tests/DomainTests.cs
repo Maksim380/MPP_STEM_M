@@ -1,4 +1,4 @@
-using Greenhouse.Domain;
+using Greenhouse.Core.Domain;
 
 namespace Greenhouse.Tests;
 

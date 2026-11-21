@@ -1,19 +1,37 @@
 # docker compose up --build  →  дашборд на http://localhost:8080
-# Секрети беруться з файлу .env (див. .env.example), а не з коду.
+# Секрети беруться з файлу .env (скопіюйте .env.example), а не з коду.
 services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: greenhouse
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD у .env}
+      POSTGRES_DB: greenhouse
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U greenhouse"]
+      interval: 5s
+      retries: 10
+
   api:
     build:
       context: .
       target: api
+    depends_on:
+      db:
+        condition: service_healthy
     ports:
       - "8080:8080"
     environment:
+      Database__Provider: Postgres
+      ConnectionStrings__Greenhouse: Host=db;Database=greenhouse;Username=greenhouse;Password=${POSTGRES_PASSWORD}
       Auth__SensorApiKey: ${SENSOR_API_KEY:?задайте SENSOR_API_KEY у .env}
-      Auth__OperatorUsername: ${OPERATOR_USERNAME:-operator}
-      Auth__OperatorPassword: ${OPERATOR_PASSWORD:?задайте OPERATOR_PASSWORD у .env}
+      Auth__AdminUsername: ${ADMIN_USERNAME:-admin}
+      Auth__AdminPassword: ${ADMIN_PASSWORD:?задайте ADMIN_PASSWORD у .env}
       Auth__JwtSigningKey: ${JWT_SIGNING_KEY:?задайте JWT_SIGNING_KEY у .env (мінімум 32 символи)}
     volumes:
-      - greenhouse-data:/data
+      - api-logs:/data/logs
 
   simulator:
     build:
@@ -27,4 +45,5 @@ services:
     restart: on-failure
 
 volumes:
-  greenhouse-data:
+  pg-data:
+  api-logs:

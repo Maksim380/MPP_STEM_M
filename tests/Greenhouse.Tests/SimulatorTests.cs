@@ -1,5 +1,5 @@
 using System.Net;
-using Greenhouse.Domain;
+using Greenhouse.Core.Domain;
 using Greenhouse.Simulator;
 
 namespace Greenhouse.Tests;
