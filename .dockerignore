@@ -1,0 +1,8 @@
+**/bin/
+**/obj/
+**/logs/
+**/*.db*
+TestResults/
+coverage/
+.git/
+.env

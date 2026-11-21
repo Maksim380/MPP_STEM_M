@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Моніторинг теплиці</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Моніторинг теплиці</h1>
+    <label class="picker">Теплиця
+      <select id="greenhouse"></select>
+    </label>
+    <p id="conn" class="muted" role="status">Підключення…</p>
+    <div class="account">
+      <form id="login" class="login">
+        <input name="username" placeholder="Логін" autocomplete="username" required>
+        <input name="password" type="password" placeholder="Пароль" autocomplete="current-password" required>
+        <button type="submit">Увійти</button>
+      </form>
+      <p id="who" class="muted" hidden></p>
+      <button id="logout" type="button" hidden>Вийти</button>
+    </div>
+  </header>
+  <main>
+    <section id="cards" class="cards" aria-label="Поточні покази датчиків"></section>
+    <section class="table-wrap">
+      <h2>Журнал тривог</h2>
+      <table id="alerts">
+        <thead><tr><th>Відкрито (UTC)</th><th>Датчик</th><th>Тип</th><th class="num">Значення</th><th>Стан</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+    <section class="table-wrap">
+      <h2>Останні виміри</h2>
+      <table id="recent">
+        <thead><tr><th>Час (UTC)</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </main>
+  <!-- SignalR-клієнт (@microsoft/signalr 8.0.7, MIT) лежить локально, щоб дашборд працював без інтернету.
+       Якщо з'єднання не вдалося, дашборд опитує API кожні 3 с. -->
+  <script src="lib/signalr.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
