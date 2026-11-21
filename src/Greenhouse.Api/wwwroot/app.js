@@ -1,0 +1,242 @@
+// Дашборд: раз на REFRESH_MS опитує бекенд і перемальовує картки та графіки.
+"use strict";
+
+const REFRESH_MS = 3000;
+const HISTORY = 60; // скільки останніх точок показувати на графіку
+const RECENT_ROWS = 10; // скільки рядків у таблиці «Останні виміри»
+
+const LABELS = { temperature: "Температура", humidity: "Вологість повітря", light: "Освітленість" };
+const STATUS_TEXT = { ok: "Норма", low: "Низько", high: "Високо", no_data: "Немає даних" };
+
+const cardsEl = document.getElementById("cards");
+const connEl = document.getElementById("conn");
+const recentBody = document.querySelector("#recent tbody");
+const alertsBody = document.querySelector("#alerts tbody");
+const loginForm = document.getElementById("login");
+const whoEl = document.getElementById("who");
+const cards = {}; // sensor name -> { el, sensor }
+let token = null; // JWT оператора; лише в пам'яті сторінки, щоб не зберігати його в localStorage
+
+async function getJSON(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${url}: ${res.status}`);
+  return res.json();
+}
+
+function fmt(value, unit) {
+  if (value === null || value === undefined) return "—";
+  const digits = unit === "lx" ? 0 : 1;
+  return value.toLocaleString("uk-UA", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+
+function timeOf(iso) {
+  return iso ? iso.slice(11, 19) : "";
+}
+
+function createCard(sensor) {
+  const el = document.createElement("article");
+  el.className = "card";
+  el.innerHTML = `
+    <div class="label"></div>
+    <div><span class="value">—</span><span class="unit"></span></div>
+    <div class="range"></div>
+    <span class="badge no_data">${STATUS_TEXT.no_data}</span>
+    <svg class="chart" role="img"></svg>
+    <div class="tooltip" hidden></div>`;
+  el.querySelector(".label").textContent = `${LABELS[sensor.kind] || sensor.kind} · ${sensor.name}`;
+  el.querySelector(".unit").textContent = sensor.unit;
+  el.querySelector(".range").textContent =
+    `Норма: ${fmt(sensor.comfort_min, sensor.unit)}–${fmt(sensor.comfort_max, sensor.unit)} ${sensor.unit}`;
+  el.querySelector("svg").setAttribute("aria-label", `Графік: ${LABELS[sensor.kind] || sensor.kind}`);
+  cardsEl.appendChild(el);
+  cards[sensor.name] = { el, sensor, points: [] };
+}
+
+function drawChart(card) {
+  const svg = card.el.querySelector("svg");
+  const { sensor } = card;
+  const pts = card.points; // старіші першими
+  const W = svg.clientWidth || 300, H = 120, padL = 4, padR = 4, padT = 6, padB = 18;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  if (pts.length === 0) { svg.innerHTML = ""; return; }
+
+  let lo = Math.min(sensor.comfort_min, ...pts.map(p => p.value));
+  let hi = Math.max(sensor.comfort_max, ...pts.map(p => p.value));
+  const pad = (hi - lo) * 0.1 || 1;
+  lo -= pad; hi += pad;
+  const x = i => padL + (pts.length === 1 ? 0 : i * (W - padL - padR) / (pts.length - 1));
+  const y = v => padT + (hi - v) * (H - padT - padB) / (hi - lo);
+
+  const bandTop = y(sensor.comfort_max), bandBot = y(sensor.comfort_min);
+  const path = pts.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join("");
+  svg.innerHTML = `
+    <rect class="band" x="0" y="${bandTop}" width="${W}" height="${bandBot - bandTop}"></rect>
+    <line class="grid" x1="0" x2="${W}" y1="${H - padB}" y2="${H - padB}"></line>
+    <path class="line" d="${path}"></path>
+    <text class="axis-label" x="${padL}" y="${H - 4}">${timeOf(pts[0].recorded_at)}</text>
+    <text class="axis-label" x="${W - padR}" y="${H - 4}" text-anchor="end">${timeOf(pts[pts.length - 1].recorded_at)}</text>
+    <line class="cross" y1="${padT}" y2="${H - padB}" visibility="hidden"></line>
+    <circle class="dot" r="4" visibility="hidden"></circle>
+    <rect x="0" y="0" width="${W}" height="${H}" fill="transparent"></rect>`;
+
+  const cross = svg.querySelector(".cross"), dot = svg.querySelector(".dot");
+  const tip = card.el.querySelector(".tooltip");
+  const hit = svg.lastElementChild;
+  hit.addEventListener("mousemove", ev => {
+    const r = svg.getBoundingClientRect();
+    const px = (ev.clientX - r.left) * W / r.width;
+    const i = Math.max(0, Math.min(pts.length - 1, Math.round((px - padL) / ((W - padL - padR) / Math.max(1, pts.length - 1)))));
+    const p = pts[i];
+    cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i)); cross.setAttribute("visibility", "visible");
+    dot.setAttribute("cx", x(i)); dot.setAttribute("cy", y(p.value)); dot.setAttribute("visibility", "visible");
+    tip.textContent = `${timeOf(p.recorded_at)} · ${fmt(p.value, sensor.unit)} ${sensor.unit}`;
+    tip.hidden = false;
+    const cardR = card.el.getBoundingClientRect();
+    const left = Math.min(ev.clientX - cardR.left + 12, cardR.width - tip.offsetWidth - 8);
+    tip.style.left = `${left}px`;
+    tip.style.top = `${r.top - cardR.top - 4}px`;
+  });
+  hit.addEventListener("mouseleave", () => {
+    cross.setAttribute("visibility", "hidden"); dot.setAttribute("visibility", "hidden"); tip.hidden = true;
+  });
+}
+
+// Таблиця: один рядок на момент часу, окремий стовпець для кожного датчика.
+function renderHeader() {
+  const tr = document.querySelector("#recent thead tr");
+  for (const { sensor } of Object.values(cards)) {
+    const th = document.createElement("th");
+    th.className = "num";
+    th.textContent = `${LABELS[sensor.kind] || sensor.kind}, ${sensor.unit}`;
+    tr.appendChild(th);
+  }
+}
+
+function renderRecent(recent) {
+  const byTime = new Map(); // recorded_at -> { sensor name -> value }, новіші першими
+  for (const r of recent) {
+    if (!byTime.has(r.recorded_at)) byTime.set(r.recorded_at, {});
+    byTime.get(r.recorded_at)[r.sensor] = r.value;
+  }
+  recentBody.innerHTML = "";
+  for (const [time, values] of [...byTime].slice(0, RECENT_ROWS)) {
+    const tr = document.createElement("tr");
+    const tdTime = document.createElement("td");
+    tdTime.textContent = time.replace("T", " ").slice(0, 19);
+    tr.appendChild(tdTime);
+    for (const { sensor } of Object.values(cards)) {
+      const td = document.createElement("td");
+      td.className = "num";
+      td.textContent = fmt(values[sensor.name], sensor.unit);
+      tr.appendChild(td);
+    }
+    recentBody.appendChild(tr);
+  }
+}
+
+const ALERT_TEXT = { low: "Низько", high: "Високо" };
+
+function cell(tr, text, cls) {
+  const td = document.createElement("td");
+  td.textContent = text;
+  if (cls) td.className = cls;
+  tr.appendChild(td);
+  return td;
+}
+
+function renderAlerts(alerts) {
+  alertsBody.innerHTML = "";
+  if (alerts.length === 0) {
+    const tr = document.createElement("tr");
+    cell(tr, "Тривог немає", "muted").colSpan = 6;
+    alertsBody.appendChild(tr);
+    return;
+  }
+  for (const a of alerts) {
+    const tr = document.createElement("tr");
+    const unit = cards[a.sensor]?.sensor.unit ?? "";
+    cell(tr, a.opened_at.replace("T", " ").slice(0, 19));
+    cell(tr, a.sensor);
+    cell(tr, ALERT_TEXT[a.kind] ?? a.kind);
+    cell(tr, `${fmt(a.trigger_value, unit)} ${unit}`, "num");
+    const state = a.closed_at ? "Закрита" : "Активна";
+    cell(tr, a.acknowledged_by ? `${state}, підтвердив ${a.acknowledged_by}` : state);
+    const actions = cell(tr, "");
+    if (token && !a.acknowledged_at) {
+      const btn = document.createElement("button");
+      btn.textContent = "Підтвердити";
+      btn.addEventListener("click", () => acknowledge(a.id));
+      actions.appendChild(btn);
+    }
+    alertsBody.appendChild(tr);
+  }
+}
+
+async function acknowledge(id) {
+  const res = await fetch(`/api/alerts/${id}/ack`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+  if (res.status === 401) { setToken(null); return; }
+  await refresh();
+}
+
+function setToken(value, user) {
+  token = value;
+  loginForm.hidden = Boolean(value);
+  whoEl.hidden = !value;
+  whoEl.textContent = value ? `Оператор: ${user}` : "";
+}
+
+loginForm.addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const data = Object.fromEntries(new FormData(loginForm));
+  const res = await fetch("/api/auth/token", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data),
+  });
+  if (!res.ok) { whoEl.hidden = false; whoEl.textContent = "Неправильний логін або пароль"; return; }
+  setToken((await res.json()).access_token, data.username);
+  loginForm.reset();
+  await refresh();
+});
+
+async function refresh() {
+  try {
+    const [latest, recent, alerts] = await Promise.all([
+      getJSON("/api/readings/latest"),
+      getJSON(`/api/readings?limit=${(RECENT_ROWS + 1) * Object.keys(cards).length}`),
+      getJSON("/api/alerts?limit=15"),
+    ]);
+    for (const row of latest) {
+      const card = cards[row.sensor];
+      if (!card) continue;
+      card.el.querySelector(".value").textContent = fmt(row.value, row.unit);
+      const badge = card.el.querySelector(".badge");
+      badge.className = `badge ${row.status}`;
+      badge.textContent = STATUS_TEXT[row.status];
+      const history = await getJSON(`/api/readings?sensor=${encodeURIComponent(row.sensor)}&limit=${HISTORY}`);
+      card.points = history.reverse();
+      drawChart(card);
+    }
+    renderRecent(recent);
+    renderAlerts(alerts);
+    connEl.textContent = `Оновлено ${new Date().toLocaleTimeString("uk-UA")}`;
+  } catch (err) {
+    connEl.textContent = "Немає зв'язку з бекендом";
+    console.error(err);
+  }
+}
+
+async function init() {
+  try {
+    const sensors = await getJSON("/api/sensors");
+    sensors.forEach(createCard);
+    renderHeader();
+  } catch (err) {
+    connEl.textContent = "Немає зв'язку з бекендом";
+    console.error(err);
+    setTimeout(init, REFRESH_MS);
+    return;
+  }
+  await refresh();
+  setInterval(refresh, REFRESH_MS);
+}
+
+init();
