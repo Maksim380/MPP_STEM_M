@@ -3,6 +3,7 @@
 
 const REFRESH_MS = 3000;
 const HISTORY = 60; // скільки останніх точок показувати на графіку
+const RECENT_ROWS = 10; // скільки рядків у таблиці «Останні виміри»
 
 const LABELS = { temperature: "Температура", humidity: "Вологість повітря", light: "Освітленість" };
 const STATUS_TEXT = { ok: "Норма", low: "Низько", high: "Високо", no_data: "Немає даних" };
@@ -96,11 +97,44 @@ function drawChart(card) {
   });
 }
 
+// Таблиця: один рядок на момент часу, окремий стовпець для кожного датчика.
+function renderHeader() {
+  const tr = document.querySelector("#recent thead tr");
+  for (const { sensor } of Object.values(cards)) {
+    const th = document.createElement("th");
+    th.className = "num";
+    th.textContent = `${LABELS[sensor.kind] || sensor.kind}, ${sensor.unit}`;
+    tr.appendChild(th);
+  }
+}
+
+function renderRecent(recent) {
+  const byTime = new Map(); // recorded_at -> { sensor name -> value }, новіші першими
+  for (const r of recent) {
+    if (!byTime.has(r.recorded_at)) byTime.set(r.recorded_at, {});
+    byTime.get(r.recorded_at)[r.sensor] = r.value;
+  }
+  recentBody.innerHTML = "";
+  for (const [time, values] of [...byTime].slice(0, RECENT_ROWS)) {
+    const tr = document.createElement("tr");
+    const tdTime = document.createElement("td");
+    tdTime.textContent = time.replace("T", " ").slice(0, 19);
+    tr.appendChild(tdTime);
+    for (const { sensor } of Object.values(cards)) {
+      const td = document.createElement("td");
+      td.className = "num";
+      td.textContent = fmt(values[sensor.name], sensor.unit);
+      tr.appendChild(td);
+    }
+    recentBody.appendChild(tr);
+  }
+}
+
 async function refresh() {
   try {
     const [latest, recent] = await Promise.all([
       getJSON("/api/readings/latest"),
-      getJSON("/api/readings?limit=10"),
+      getJSON(`/api/readings?limit=${(RECENT_ROWS + 1) * Object.keys(cards).length}`),
     ]);
     for (const row of latest) {
       const card = cards[row.sensor];
@@ -113,18 +147,7 @@ async function refresh() {
       card.points = history.reverse();
       drawChart(card);
     }
-    recentBody.innerHTML = "";
-    for (const r of recent) {
-      const tr = document.createElement("tr");
-      const unit = cards[r.sensor] ? cards[r.sensor].sensor.unit : "";
-      for (const [text, cls] of [[r.recorded_at.replace("T", " ").slice(0, 19), ""], [r.sensor, ""], [`${fmt(r.value, unit)} ${unit}`, "num"]]) {
-        const td = document.createElement("td");
-        td.textContent = text;
-        if (cls) td.className = cls;
-        tr.appendChild(td);
-      }
-      recentBody.appendChild(tr);
-    }
+    renderRecent(recent);
     connEl.textContent = `Оновлено ${new Date().toLocaleTimeString("uk-UA")}`;
   } catch (err) {
     connEl.textContent = "Немає зв'язку з бекендом";
@@ -136,6 +159,7 @@ async function init() {
   try {
     const sensors = await getJSON("/api/sensors");
     sensors.forEach(createCard);
+    renderHeader();
   } catch (err) {
     connEl.textContent = "Немає зв'язку з бекендом";
     console.error(err);

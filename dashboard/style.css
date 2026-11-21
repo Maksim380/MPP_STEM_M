@@ -83,5 +83,5 @@ svg.chart .dot { fill: var(--series); stroke: var(--surface); stroke-width: 2; }
 .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 32px; overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 th, td { text-align: left; padding: 6px 8px; white-space: nowrap; border-bottom: 1px solid var(--grid); }
-th { color: var(--ink-2); font-weight: 500; font-size: 13px; }
+th { color: var(--ink-2); font-weight: 500; font-size: 13px; white-space: normal; vertical-align: bottom; }
 .num { text-align: right; }
