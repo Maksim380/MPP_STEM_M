@@ -202,7 +202,7 @@ async function refresh() {
     const [latest, recent, alerts] = await Promise.all([
       getJSON("/api/readings/latest"),
       getJSON(`/api/readings?limit=${(RECENT_ROWS + 1) * Object.keys(cards).length}`),
-      getJSON("/api/alerts?limit=15"),
+      getJSON("/api/alerts?limit=8"),
     ]);
     for (const row of latest) {
       const card = cards[row.sensor];
