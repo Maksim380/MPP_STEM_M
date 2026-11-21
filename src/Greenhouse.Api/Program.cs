@@ -31,7 +31,7 @@ builder.Services.AddSerilog(lc => lc
     .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", LogEventLevel.Fatal)
     .Enrich.FromLogContext()
     .WriteTo.Console(formatProvider: System.Globalization.CultureInfo.InvariantCulture)
-    .WriteTo.File(logPath, rollingInterval: RollingInterval.Day, retainedFileCountLimit: 14, shared: true,
+    .WriteTo.File(logPath, rollingInterval: RollingInterval.Day, retainedFileCountLimit: 14,
         formatProvider: System.Globalization.CultureInfo.InvariantCulture));
 
 // Дані: SQLite або PostgreSQL залежно від Database:Provider.
